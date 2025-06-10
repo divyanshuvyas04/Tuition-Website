@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Victory Classes - Admin</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="icon" type="image/x-icon" href="images/logo/favicon.ico">
+    <!-- Add SheetJS for Excel export -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="logo">
+                <img src="images/logo/logo.png" alt="Victory Classes Logo">
+                Victory Classes
+            </a>
+            <div class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="register.html">Registration</a>
+                <a href="results.html">Results</a>
+                <a href="admin.html" class="active">Admin</a>
+            </div>
+        </div>
+    </nav>
+    <div class="nav-overlay"></div>
+
+    <div class="container">
+        <div id="loginForm" class="form-container">
+            <h2>Admin Login</h2>
+            <form id="adminLoginForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+
+                <button type="submit" class="btn">Login</button>
+            </form>
+        </div>
+
+        <div id="adminDashboard" class="admin-panel" style="display: none;">
+            <div class="admin-header">
+                <h2 class="admin-title">Admin Dashboard</h2>
+                <div class="admin-actions">
+                    <button id="downloadExcelBtn" class="btn btn-secondary">
+                        <i class="fas fa-download"></i> Download Excel
+                    </button>
+                    <button id="logoutBtn" class="btn">Logout</button>
+                </div>
+            </div>
+
+            <div class="admin-content">
+                <div class="admin-grid">
+                    <div class="admin-section registrations-section">
+                        <div class="section-header">
+                            <h3>Recent Registrations</h3>
+                            <div class="section-actions">
+                                <button id="refreshRegistrationsBtn" class="btn btn-icon">
+                                    <i class="fas fa-sync"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="table-container">
+                            <table id="registrationsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Photo</th>
+                                        <th>Name</th>
+                                        <th>Class</th>
+                                        <th>Phone</th>
+                                        <th>Email</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Registrations will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="admin-section results-section">
+                        <div class="section-header">
+                            <h3>Post New Result</h3>
+                        </div>
+                        <form id="resultsForm">
+                            <div class="form-group">
+                                <label for="title">Title *</label>
+                                <input type="text" id="title" name="title" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="description">Description *</label>
+                                <textarea id="description" name="description" rows="3" required></textarea>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="resultImage">Result Image *</label>
+                                <input type="file" id="resultImage" name="resultImage" accept="image/*" required>
+                                <div id="imagePreview" class="image-preview"></div>
+                            </div>
+
+                            <button type="submit" class="btn">Post Result</button>
+                        </form>
+
+                        <div class="section-header" style="margin-top: 2rem;">
+                            <h3>Posted Results</h3>
+                        </div>
+                        <div class="table-container">
+                            <table id="resultsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Title</th>
+                                        <th>Description</th>
+                                        <th>Date</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Results will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check for existing token
+        const token = localStorage.getItem('adminToken');
+        if (token) {
+            showDashboard();
+        }
+
+        // Login form handler
+        document.getElementById('adminLoginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('adminToken', data.token);
+                    showDashboard();
+                } else {
+                    showMessage(data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Login failed. Please try again.', 'error');
+            }
+        });
+
+        // Logout handler
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('adminToken');
+            showLoginForm();
+        });
+
+        // Handle results form submission
+        document.getElementById('resultsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            formData.append('title', document.getElementById('title').value);
+            formData.append('description', document.getElementById('description').value);
+            formData.append('resultImage', document.getElementById('resultImage').files[0]);
+
+            try {
+                const response = await fetch('/api/results', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+                    },
+                    body: formData
+                });
+
+                if (response.ok) {
+                    showMessage('Result posted successfully', 'success');
+                    document.getElementById('resultsForm').reset();
+                    document.getElementById('imagePreview').innerHTML = '';
+                    loadResults();
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to post result');
+                }
+            } catch (error) {
+                console.error('Error posting result:', error);
+                showMessage(error.message || 'Failed to post result', 'error');
+            }
+        });
+
+        // Handle image preview
+        document.getElementById('resultImage').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('imagePreview').innerHTML = `
+                        <img src="${e.target.result}" alt="Preview" style="max-width: 200px; margin-top: 10px;">
+                    `;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Download Excel handler
+        document.getElementById('downloadExcelBtn').addEventListener('click', async () => {
+            const token = localStorage.getItem('adminToken');
+            if (!token) {
+                showMessage('Please login first', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/registrations', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const registrations = await response.json();
+                    
+                    // Prepare data for Excel
+                    const excelData = registrations.map(reg => ({
+                        'Student Name': reg.studentName,
+                        'Class': reg.class,
+                        'Phone': reg.phone,
+                        'Email': reg.email,
+                        'Registration Date': new Date(reg.date).toLocaleDateString()
+                    }));
+
+                    // Create worksheet
+                    const ws = XLSX.utils.json_to_sheet(excelData);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Registrations');
+
+                    // Generate Excel file
+                    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                    
+                    // Create download link
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `registrations_${new Date().toISOString().split('T')[0]}.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+
+                    showMessage('Excel file downloaded successfully!', 'success');
+                }
+            } catch (error) {
+                console.error('Error downloading Excel:', error);
+                showMessage('Failed to download Excel file', 'error');
+            }
+        });
+
+        // Refresh registrations handler
+        document.getElementById('refreshRegistrationsBtn').addEventListener('click', loadRegistrations);
+
+        // Load registrations
+        async function loadRegistrations() {
+            const token = localStorage.getItem('adminToken');
+            if (!token) return;
+
+            try {
+                const response = await fetch('/api/registrations', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const registrations = await response.json();
+                    const tbody = document.querySelector('#registrationsTable tbody');
+                    
+                    if (registrations.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="no-data">No registrations found</td></tr>';
+                        return;
+                    }
+
+                    tbody.innerHTML = registrations.map(reg => `
+                        <tr>
+                            <td>
+                                ${reg.photoUrl ? 
+                                    `<img src="${reg.photoUrl}" alt="${reg.studentName}" class="student-photo">` :
+                                    `<div class="student-photo-placeholder"><i class="fas fa-user"></i></div>`
+                                }
+                            </td>
+                            <td>${reg.studentName}</td>
+                            <td>${reg.class}</td>
+                            <td>${reg.phone}</td>
+                            <td>${reg.email}</td>
+                            <td>
+                                <button class="btn btn-danger" onclick="deleteRegistration('${reg._id}')">Delete</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading registrations:', error);
+                showMessage('Failed to load registrations', 'error');
+            }
+        }
+
+        // Load results
+        async function loadResults() {
+            const token = localStorage.getItem('adminToken');
+            if (!token) return;
+
+            try {
+                const response = await fetch('/api/results', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const results = await response.json();
+                    const tbody = document.querySelector('#resultsTable tbody');
+                    
+                    if (results.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" class="no-data">No results found</td></tr>';
+                        return;
+                    }
+
+                    tbody.innerHTML = results.map(result => `
+                        <tr>
+                            <td>${result.title}</td>
+                            <td>${result.description}</td>
+                            <td>${new Date(result.date).toLocaleDateString()}</td>
+                            <td>
+                                <button class="btn btn-danger" onclick="deleteResult('${result._id}')">Delete</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading results:', error);
+                showMessage('Failed to load results', 'error');
+            }
+        }
+
+        // Function to delete registration
+        async function deleteRegistration(id) {
+            if (!confirm('Are you sure you want to delete this registration?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/registrations/${id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+                    }
+                });
+                
+                if (response.ok) {
+                    showMessage('Registration deleted successfully', 'success');
+                    loadRegistrations();
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to delete registration');
+                }
+            } catch (error) {
+                console.error('Error deleting registration:', error);
+                showMessage(error.message || 'Failed to delete registration', 'error');
+            }
+        }
+
+        // Function to delete result
+        async function deleteResult(id) {
+            if (!confirm('Are you sure you want to delete this result?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/results/${id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+                    }
+                });
+                
+                if (response.ok) {
+                    showMessage('Result deleted successfully', 'success');
+                    loadResults();
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to delete result');
+                }
+            } catch (error) {
+                console.error('Error deleting result:', error);
+                showMessage(error.message || 'Failed to delete result', 'error');
+            }
+        }
+
+        // Call loadResults when showing dashboard
+        function showDashboard() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('adminDashboard').style.display = 'block';
+            loadRegistrations();
+            loadResults();
+        }
+
+        function showLoginForm() {
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('adminDashboard').style.display = 'none';
+        }
+
+        function showMessage(message, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = message;
+            
+            document.body.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 3000);
+        }
+
+        // Mobile Navigation for Admin Page
+        document.addEventListener('DOMContentLoaded', () => {
+            const hamburger = document.querySelector('.hamburger');
+            const navLinks = document.querySelector('.nav-links');
+            const overlay = document.querySelector('.nav-overlay');
+
+            if (hamburger && navLinks && overlay) {
+                hamburger.addEventListener('click', () => {
+                    hamburger.classList.toggle('active');
+                    navLinks.classList.toggle('active');
+                    overlay.classList.toggle('active');
+                    document.body.style.overflow = navLinks.classList.contains('active') ? 'hidden' : '';
+                });
+
+                overlay.addEventListener('click', () => {
+                    hamburger.classList.remove('active');
+                    navLinks.classList.remove('active');
+                    overlay.classList.remove('active');
+                    document.body.style.overflow = '';
+                });
+
+                // Close menu when clicking a link
+                navLinks.querySelectorAll('a').forEach(link => {
+                    link.addEventListener('click', () => {
+                        hamburger.classList.remove('active');
+                        navLinks.classList.remove('active');
+                        overlay.classList.remove('active');
+                        document.body.style.overflow = '';
+                    });
+                });
+            }
+        });
+    </script>
+</body>
+</html> 

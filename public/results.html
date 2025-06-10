@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Victory Classes - Results</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="icon" type="image/x-icon" href="images/logo/favicon.ico">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="logo">
+                <img src="images/logo/logo.png" alt="Victory Classes Logo">
+                Victory Classes
+            </a>
+            <div class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="register.html">Registration</a>
+                <a href="results.html" class="active">Results</a>
+                <a href="admin.html">Admin</a>
+            </div>
+        </div>
+    </nav>
+    <div class="nav-overlay"></div>
+
+    <div class="container">
+        <div class="results-section">
+            <h1>Our Success Stories</h1>
+            <div id="resultsGrid" class="results-grid">
+                <!-- Results will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Function to load and display results
+        async function loadResults() {
+            try {
+                const response = await fetch('/api/results');
+                if (response.ok) {
+                    const results = await response.json();
+                    const resultsGrid = document.getElementById('resultsGrid');
+                    
+                    if (results.length === 0) {
+                        resultsGrid.innerHTML = '<p class="no-results">No results posted yet.</p>';
+                        return;
+                    }
+
+                    resultsGrid.innerHTML = `
+                        <div class="results-grid">
+                            ${results.map(result => `
+                                <div class="result-card">
+                                    <h3>${result.title}</h3>
+                                    <p>${result.description}</p>
+                                    <img src="${result.imageUrl}" alt="${result.title}" class="result-image">
+                                    <p class="result-date">Posted on: ${new Date(result.date).toLocaleDateString()}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    throw new Error('Failed to load results');
+                }
+            } catch (error) {
+                console.error('Error loading results:', error);
+                document.getElementById('resultsGrid').innerHTML = 
+                    '<p class="error-message">Failed to load results. Please try again later.</p>';
+            }
+        }
+
+        // Load results when page loads
+        document.addEventListener('DOMContentLoaded', loadResults);
+    </script>
+</body>
+</html> 

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Victory Classes - Registration</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="index.html" class="logo">
+                <img src="images/logo/logo.png" alt="Victory Classes Logo">
+                Victory Classes
+            </a>
+            <div class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <div class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="register.html" class="active">Registration</a>
+                <a href="results.html">Results</a>
+            </div>
+        </div>
+    </nav>
+    <div class="nav-overlay"></div>
+
+    <div class="container">
+        <div class="form-container">
+            <h2>Student Registration Form</h2>
+            <form id="registrationForm">
+                <div class="form-group">
+                    <label for="studentName">Student Name *</label>
+                    <input type="text" id="studentName" name="studentName" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="fatherName">Father's Name *</label>
+                    <input type="text" id="fatherName" name="fatherName" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="motherName">Mother's Name</label>
+                    <input type="text" id="motherName" name="motherName">
+                </div>
+
+                <div class="form-group">
+                    <label for="dateOfBirth">Date of Birth *</label>
+                    <input type="date" id="dateOfBirth" name="dateOfBirth" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="class">Class *</label>
+                    <select id="class" name="class" required>
+                        <option value="">Select Class</option>
+                        <option value="1">Class 1</option>
+                        <option value="2">Class 2</option>
+                        <option value="3">Class 3</option>
+                        <option value="4">Class 4</option>
+                        <option value="5">Class 5</option>
+                        <option value="6">Class 6</option>
+                        <option value="7">Class 7</option>
+                        <option value="8">Class 8</option>
+                        <option value="9">Class 9</option>
+                        <option value="10">Class 10</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="phone">Phone Number *</label>
+                    <input type="tel" id="phone" name="phone" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email *</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="studentPhoto">Student Photo (Optional)</label>
+                    <input type="file" id="studentPhoto" name="studentPhoto" accept="image/*">
+                    <div id="photoPreview" class="image-preview"></div>
+                    <small class="form-text">You can upload a photo from your gallery. Maximum size: 2MB</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="address">Address *</label>
+                    <textarea id="address" name="address" rows="3" required></textarea>
+                </div>
+
+                <button type="submit" class="btn">Register Now</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/main.js"></script>
+
+    <script>
+    // Photo preview handler
+    document.getElementById('studentPhoto').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            // Check file size (2MB limit)
+            if (file.size > 2 * 1024 * 1024) {
+                showMessage('Photo size should be less than 2MB', 'error');
+                this.value = '';
+                return;
+            }
+
+            const reader = new FileReader();
+            const preview = document.getElementById('photoPreview');
+            
+            reader.onload = function(e) {
+                preview.innerHTML = `
+                    <img src="${e.target.result}" alt="Preview" style="max-width: 100%; max-height: 200px; margin-top: 10px; border-radius: 5px;">
+                `;
+            }
+            
+            reader.readAsDataURL(file);
+        } else {
+            document.getElementById('photoPreview').innerHTML = '';
+        }
+    });
+
+    // Update form submission handler
+    document.getElementById('registrationForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData(e.target);
+        
+        try {
+            const response = await fetch('/api/register', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                showMessage('Registration successful!', 'success');
+                e.target.reset();
+                document.getElementById('photoPreview').innerHTML = '';
+            } else {
+                showMessage(data.error, 'error');
+            }
+        } catch (error) {
+            showMessage('Registration failed. Please try again.', 'error');
+        }
+    });
+    </script>
+</body>
+</html> 
