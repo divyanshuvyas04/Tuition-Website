@@ -274,4 +274,6 @@ app.delete('/api/results/:id', auth, async (req, res) => {
     }
 });
 
-app.listen(port); 
+app.listen(port, () => {
+    // console.log(`Server running on port ${port}`); // Removed for production
+}); 
