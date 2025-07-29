@@ -1,14 +1,21 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const cloudinary = require('./config/cloudinary');
+const connectDB = require('./config/database');
+const Registration = require('./models/Registration');
+const Result = require('./models/Result');
+const Admin = require('./models/Admin');
+const HomeImage = require('./models/HomeImage');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Connect to MongoDB
+connectDB();
 
 // Middleware
 app.use(express.json());
@@ -16,62 +23,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-// File paths
-const dataDir = path.join(__dirname, 'data');
-const registrationsPath = path.join(dataDir, 'registrations.json');
-const resultsPath = path.join(dataDir, 'results.json');
-const adminsPath = path.join(dataDir, 'admins.json');
-
-// Helper function to generate unique ID
-function generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
-}
-
-// Helper function to ensure data has IDs
-function ensureDataHasIds(data) {
-    if (!Array.isArray(data)) return [];
-    return data.map(item => {
-        if (!item._id) {
-            item._id = generateId();
-        }
-        return item;
-    });
-}
-
-// Initialize data directory and files
-function initializeData() {
-    try {
-        // Create data directory if it doesn't exist
-        if (!fs.existsSync(dataDir)) {
-            fs.mkdirSync(dataDir);
-        }
-
-        // Initialize registrations file
-        if (!fs.existsSync(registrationsPath)) {
-            fs.writeFileSync(registrationsPath, '[]');
-        }
-
-        // Initialize results file
-        if (!fs.existsSync(resultsPath)) {
-            fs.writeFileSync(resultsPath, '[]');
-        }
-
-        // Initialize admins file
-        if (!fs.existsSync(adminsPath)) {
-            const defaultAdmin = {
-                username: 'admin',
-                password: bcrypt.hashSync('admin123', 10)
-            };
-            fs.writeFileSync(adminsPath, JSON.stringify([defaultAdmin], null, 2));
-        }
-    } catch (error) {
-        console.error('Error initializing data:', error);
-    }
-}
-
-// Initialize data
-initializeData();
 
 // Authentication middleware
 const auth = async (req, res, next) => {
@@ -93,6 +44,55 @@ const auth = async (req, res, next) => {
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
+// Initialize default admin if none exists
+async function initializeAdmin() {
+    try {
+        // Check if the new admin already exists
+        const existingAdmin = await Admin.findOne({ username: 'avinashmalav36' });
+        
+        if (existingAdmin) {
+            console.log('Admin already exists with correct credentials');
+            return;
+        }
+        
+        // Check if there are any admins at all
+        const adminCount = await Admin.countDocuments();
+        
+        if (adminCount === 0) {
+            // No admins exist, create new one
+            const defaultAdmin = new Admin({
+                username: 'avinashmalav36',
+                password: await bcrypt.hash('Avinash@10', 10)
+            });
+            await defaultAdmin.save();
+            console.log('Default admin created: username: avinashmalav36, password: Avinash@10');
+        } else {
+            // Update existing admin to new credentials (only if it's the old admin)
+            const oldAdmin = await Admin.findOne({ username: 'admin' });
+            if (oldAdmin) {
+                oldAdmin.username = 'avinashmalav36';
+                oldAdmin.password = await bcrypt.hash('Avinash@10', 10);
+                await oldAdmin.save();
+                console.log('Admin credentials updated: username: avinashmalav36, password: Avinash@10');
+            } else {
+                console.log('Admin exists but not the expected one, creating new admin');
+                const defaultAdmin = new Admin({
+                    username: 'avinashmalav36',
+                    password: await bcrypt.hash('Avinash@10', 10)
+                });
+                await defaultAdmin.save();
+                console.log('New admin created: username: avinashmalav36, password: Avinash@10');
+            }
+        }
+    } catch (error) {
+        console.error('Error initializing admin:', error);
+        // Don't throw error, just log it
+    }
+}
+
+// Initialize admin
+initializeAdmin();
+
 // Routes
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -113,8 +113,7 @@ app.get('/admin', (req, res) => {
 app.post('/api/login', async (req, res) => {
     try {
         const { username, password } = req.body;
-        const admins = JSON.parse(fs.readFileSync(adminsPath, 'utf8'));
-        const admin = admins.find(a => a.username === username);
+        const admin = await Admin.findOne({ username });
 
         if (!admin || !(await bcrypt.compare(password, admin.password))) {
             return res.status(401).json({ error: 'Invalid credentials' });
@@ -129,13 +128,42 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/register', upload.single('studentPhoto'), async (req, res) => {
     try {
-        const { studentName, class: studentClass, phone, email } = req.body;
+        const { 
+            studentName, 
+            fatherName, 
+            motherName, 
+            dateOfBirth, 
+            class: studentClass, 
+            phone, 
+            email, 
+            aadharNumber, 
+            formFees, 
+            address 
+        } = req.body;
+        
+        // Check for duplicate registration based on Aadhar number or phone
+        const existingRegistration = await Registration.findOne({
+            $or: [
+                { aadharNumber: aadharNumber },
+                { phone: phone }
+            ]
+        });
+        
+        if (existingRegistration) {
+            return res.status(400).json({ 
+                error: 'Registration already exists with this Aadhar number or phone number' 
+            });
+        }
+        
         let photoUrl = null;
 
         if (req.file) {
             const result = await new Promise((resolve, reject) => {
                 const stream = cloudinary.uploader.upload_stream(
-                    { upload_preset: 'victory-classes-students' },
+                    { 
+                        folder: 'victory-classes-students',
+                        resource_type: 'image'
+                    },
                     (error, result) => {
                         if (error) reject(error);
                         else resolve(result);
@@ -146,23 +174,35 @@ app.post('/api/register', upload.single('studentPhoto'), async (req, res) => {
             photoUrl = result.secure_url;
         }
 
-        const registration = {
-            _id: generateId(),
+        const registration = new Registration({
             studentName,
+            fatherName,
+            motherName,
+            dateOfBirth,
             class: studentClass,
             phone,
-            email,
-            photoUrl,
-            date: new Date().toISOString()
-        };
+            email: email || null,
+            aadharNumber,
+            formFees: parseInt(formFees),
+            address,
+            photoUrl
+        });
 
-        const registrations = JSON.parse(fs.readFileSync(registrationsPath, 'utf8'));
-        registrations.unshift(registration);
-        fs.writeFileSync(registrationsPath, JSON.stringify(registrations, null, 2));
-
+        await registration.save();
         res.json(registration);
     } catch (error) {
-        res.status(500).json({ error: 'Registration failed' });
+        console.error('Registration error:', error);
+        
+        // Handle duplicate key errors specifically
+        if (error.code === 11000) {
+            const field = Object.keys(error.keyPattern)[0];
+            const value = error.keyValue[field];
+            return res.status(400).json({ 
+                error: `Registration already exists with this ${field}: ${value}` 
+            });
+        }
+        
+        res.status(500).json({ error: 'Registration failed: ' + error.message });
     }
 });
 
@@ -171,10 +211,14 @@ app.post('/api/results', auth, upload.single('resultImage'), async (req, res) =>
         if (!req.file) {
             return res.status(400).json({ error: 'Image is required' });
         }
+        
         let imageUrl = null;
         const result = await new Promise((resolve, reject) => {
             const stream = cloudinary.uploader.upload_stream(
-                { upload_preset: 'victory-classes-results' },
+                { 
+                    folder: 'victory-classes-results',
+                    resource_type: 'image'
+                },
                 (error, result) => {
                     if (error) reject(error);
                     else resolve(result);
@@ -184,48 +228,104 @@ app.post('/api/results', auth, upload.single('resultImage'), async (req, res) =>
         });
         imageUrl = result.secure_url;
 
-        const resultData = {
-            _id: generateId(),
+        const resultData = new Result({
             title: req.body.title,
             description: req.body.description,
-            imageUrl,
-            date: new Date().toISOString()
-        };
+            imageUrl
+        });
 
-        const results = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
-        results.unshift(resultData);
-        fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2));
-
+        await resultData.save();
         res.json(resultData);
     } catch (error) {
+        console.error('Result posting error:', error);
         res.status(500).json({ error: 'Failed to post result' });
     }
 });
 
-app.get('/api/registrations', auth, (req, res) => {
+// Home image management
+app.get('/api/home-image', async (req, res) => {
     try {
-        const registrations = JSON.parse(fs.readFileSync(registrationsPath, 'utf8'));
-        // Ensure all registrations have IDs
-        const updatedRegistrations = ensureDataHasIds(registrations);
-        if (updatedRegistrations.length !== registrations.length) {
-            fs.writeFileSync(registrationsPath, JSON.stringify(updatedRegistrations, null, 2));
-        }
-        res.json(updatedRegistrations);
+        const homeImage = await HomeImage.findOne({ isActive: true });
+        res.json(homeImage);
     } catch (error) {
+        console.error('Error fetching home image:', error);
+        res.status(500).json({ error: 'Failed to fetch home image' });
+    }
+});
+
+app.post('/api/home-image', auth, upload.single('homeImage'), async (req, res) => {
+    try {
+        console.log('Home image upload request received');
+        console.log('File:', req.file);
+        console.log('Body:', req.body);
+        
+        if (!req.file) {
+            console.log('No file uploaded');
+            return res.status(400).json({ error: 'Image is required' });
+        }
+
+        console.log('Starting Cloudinary upload...');
+        let imageUrl = null;
+        const result = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+                { 
+                    folder: 'victory-classes-home',
+                    resource_type: 'image'
+                },
+                (error, result) => {
+                    if (error) {
+                        console.error('Cloudinary upload error:', error);
+                        reject(error);
+                    } else {
+                        console.log('Cloudinary upload successful:', result.secure_url);
+                        resolve(result);
+                    }
+                }
+            );
+            stream.end(req.file.buffer);
+        });
+        imageUrl = result.secure_url;
+
+        console.log('Deactivating existing home images...');
+        // Deactivate all existing home images
+        await HomeImage.updateMany({}, { isActive: false });
+
+        console.log('Creating new home image...');
+        // Create new home image
+        const homeImage = new HomeImage({
+            imageUrl,
+            title: req.body.title || 'Victory Classes',
+            description: req.body.description || 'Empowering students with quality education'
+        });
+
+        console.log('Saving home image to database...');
+        await homeImage.save();
+        console.log('Home image saved successfully');
+        
+        res.json(homeImage);
+    } catch (error) {
+        console.error('Home image upload error:', error);
+        console.error('Error stack:', error.stack);
+        res.status(500).json({ error: 'Failed to upload home image: ' + error.message });
+    }
+});
+
+app.get('/api/registrations', auth, async (req, res) => {
+    try {
+        const registrations = await Registration.find().sort({ createdAt: -1 });
+        res.json(registrations);
+    } catch (error) {
+        console.error('Error fetching registrations:', error);
         res.status(500).json({ error: 'Failed to fetch registrations' });
     }
 });
 
-app.get('/api/results', (req, res) => {
+app.get('/api/results', async (req, res) => {
     try {
-        const results = JSON.parse(fs.readFileSync(resultsPath, 'utf8'));
-        // Ensure all results have IDs
-        const updatedResults = ensureDataHasIds(results);
-        if (updatedResults.length !== results.length) {
-            fs.writeFileSync(resultsPath, JSON.stringify(updatedResults, null, 2));
-        }
-        res.json(updatedResults);
+        const results = await Result.find().sort({ createdAt: -1 });
+        res.json(results);
     } catch (error) {
+        console.error('Error fetching results:', error);
         res.status(500).json({ error: 'Failed to fetch results' });
     }
 });
@@ -233,17 +333,11 @@ app.get('/api/results', (req, res) => {
 // Delete registration
 app.delete('/api/registrations/:id', auth, async (req, res) => {
     try {
-        const registrations = JSON.parse(fs.readFileSync(registrationsPath));
-        // Ensure all registrations have IDs before trying to delete
-        const updatedRegistrations = ensureDataHasIds(registrations);
-        const index = updatedRegistrations.findIndex(r => r._id === req.params.id);
+        const registration = await Registration.findByIdAndDelete(req.params.id);
         
-        if (index === -1) {
+        if (!registration) {
             return res.status(404).json({ message: 'Registration not found' });
         }
-        
-        updatedRegistrations.splice(index, 1);
-        fs.writeFileSync(registrationsPath, JSON.stringify(updatedRegistrations, null, 2));
         
         res.json({ message: 'Registration deleted successfully' });
     } catch (error) {
@@ -255,17 +349,11 @@ app.delete('/api/registrations/:id', auth, async (req, res) => {
 // Delete result
 app.delete('/api/results/:id', auth, async (req, res) => {
     try {
-        const results = JSON.parse(fs.readFileSync(resultsPath));
-        // Ensure all results have IDs before trying to delete
-        const updatedResults = ensureDataHasIds(results);
-        const index = updatedResults.findIndex(r => r._id === req.params.id);
+        const result = await Result.findByIdAndDelete(req.params.id);
         
-        if (index === -1) {
+        if (!result) {
             return res.status(404).json({ message: 'Result not found' });
         }
-        
-        updatedResults.splice(index, 1);
-        fs.writeFileSync(resultsPath, JSON.stringify(updatedResults, null, 2));
         
         res.json({ message: 'Result deleted successfully' });
     } catch (error) {
@@ -275,5 +363,5 @@ app.delete('/api/results/:id', auth, async (req, res) => {
 });
 
 app.listen(port, () => {
-    // console.log(`Server running on port ${port}`); // Removed for production
+    console.log(`Server running on port ${port}`);
 }); 

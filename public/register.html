@@ -65,6 +65,8 @@
                         <option value="8">Class 8</option>
                         <option value="9">Class 9</option>
                         <option value="10">Class 10</option>
+                        <option value="11">Class 11</option>
+                        <option value="12">Class 12</option>
                     </select>
                 </div>
 
@@ -74,8 +76,25 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="email">Email *</label>
-                    <input type="email" id="email" name="email" required>
+                    <label for="aadharNumber">Aadhar Number *</label>
+                    <input type="text" id="aadharNumber" name="aadharNumber" pattern="[0-9]{12}" maxlength="12" required>
+                    <small class="form-text">Enter exactly 12 digits</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="formFees">Form Fees *</label>
+                    <select id="formFees" name="formFees" required>
+                        <option value="">Select Form Fees</option>
+                        <option value="50">₹50</option>
+                        <option value="100">₹100</option>
+                        <option value="200">₹200</option>
+                        <option value="500">₹500</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="address">Address *</label>
+                    <textarea id="address" name="address" rows="3" required></textarea>
                 </div>
 
                 <div class="form-group">
@@ -86,8 +105,8 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="address">Address *</label>
-                    <textarea id="address" name="address" rows="3" required></textarea>
+                    <label for="email">Email (Optional)</label>
+                    <input type="email" id="email" name="email">
                 </div>
 
                 <button type="submit" class="btn">Register Now</button>
@@ -98,6 +117,17 @@
     <script src="js/main.js"></script>
 
     <script>
+    // Aadhar number validation
+    document.getElementById('aadharNumber').addEventListener('input', function(e) {
+        // Remove any non-digit characters
+        this.value = this.value.replace(/\D/g, '');
+        
+        // Limit to 12 digits
+        if (this.value.length > 12) {
+            this.value = this.value.slice(0, 12);
+        }
+    });
+
     // Photo preview handler
     document.getElementById('studentPhoto').addEventListener('change', function(e) {
         const file = e.target.files[0];
@@ -124,19 +154,61 @@
         }
     });
 
+    // Global flag to prevent double submission
+    let isSubmitting = false;
+
+    // Prevent rapid clicking on submit button
+    document.querySelector('button[type="submit"]').addEventListener('click', function(e) {
+        if (isSubmitting) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('Button click prevented - already submitting');
+            return false;
+        }
+    });
+
     // Update form submission handler
     document.getElementById('registrationForm').addEventListener('submit', async (e) => {
         e.preventDefault();
+        e.stopPropagation();
+        
+        // Prevent multiple submissions
+        if (isSubmitting) {
+            console.log('Form submission already in progress');
+            return;
+        }
+        
+        const submitButton = e.target.querySelector('button[type="submit"]');
+        
+        // Set submitting flag
+        isSubmitting = true;
+        
+        // Disable submit button and show loading
+        submitButton.disabled = true;
+        submitButton.textContent = 'Registering...';
+        
+        // Validate Aadhar number
+        const aadharNumber = document.getElementById('aadharNumber').value;
+        if (aadharNumber.length !== 12) {
+            showMessage('Aadhar number must be exactly 12 digits', 'error');
+            // Re-enable button
+            submitButton.disabled = false;
+            submitButton.textContent = 'Register Now';
+            isSubmitting = false;
+            return;
+        }
         
         const formData = new FormData(e.target);
         
         try {
+            console.log('Submitting registration...');
             const response = await fetch('/api/register', {
                 method: 'POST',
                 body: formData
             });
 
             const data = await response.json();
+            console.log('Registration response:', response.status, data);
 
             if (response.ok) {
                 showMessage('Registration successful!', 'success');
@@ -146,7 +218,13 @@
                 showMessage(data.error, 'error');
             }
         } catch (error) {
+            console.error('Registration error:', error);
             showMessage('Registration failed. Please try again.', 'error');
+        } finally {
+            // Re-enable submit button and reset flag
+            submitButton.disabled = false;
+            submitButton.textContent = 'Register Now';
+            isSubmitting = false;
         }
     });
     </script>
